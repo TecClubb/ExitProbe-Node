@@ -36,7 +36,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TecClubb/exitprobe-node.git"
+    "url": "git+https://github.com/TecClubb/ExitProbe-Node.git"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
