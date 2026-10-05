@@ -1,6 +1,6 @@
 # exitprobe
 
-Official Node.js / TypeScript client for the [ExitProbe](https://exitprobe.com) API. Manage projects and monitors, trigger checks, and read uptime/analytics directly from your own app — no HTTP boilerplate.
+Official Node.js / TypeScript client for the [ExitProbe](https://exitprobe.com) API. Manage VPN monitors, VPS servers and projects, read uptime/health/analytics, and check your plan and renewal date directly from your own app — no HTTP boilerplate.
 
 ## Install
 
@@ -16,29 +16,38 @@ Requires Node 18+ (uses the global `fetch`). Works in any modern JS runtime (Nod
 import { ExitProbe } from 'exitprobe';
 
 const client = new ExitProbe({
-  apiKey: process.env.EXITPROBE_API_KEY!, // Settings → API Tokens, looks like ep_live_...
+  apiKey: process.env.EXITPROBE_API_KEY!, // Settings → API Tokens, in your dashboard
 });
 
-// List monitors that are currently down
-const { data } = await client.monitors.list({ status: 'down' });
-console.log(data.monitors);
+// Fleet status at a glance: how many are up / down / degraded / flapping / inactive
+const { data: counts } = await client.monitors.summary();
 
-// Create a project, then a monitor inside it
-const { data: project } = await client.projects.create({ name: 'Production' });
-const { data: created } = await client.monitors.createForProject(project.project.id, {
+// A page of monitors (the counts always cover the whole fleet) ...
+const { data: page } = await client.monitors.list({ per_page: 25, page: 1 });
+// ... or every monitor, pages walked for you
+const down = await client.monitors.listAll({ status: 'down' });
+
+// Everything on a monitor's page: status, uptime, regions, analytics, latest checks
+const detail = await client.monitors.details(42, { range: '7d' });
+
+// Add a monitor, run a check and wait for every probe to answer
+const { data: created } = await client.monitors.create({
   name: 'EU Exit Node',
   expected_exit_ip: '203.0.113.45',
   wireguard_enabled: true,
-  wireguard_config: '[Interface]\nPrivateKey=...',
+  wireguard_config: '[Interface]\nPrivateKey=...\n[Peer]\nPublicKey=...\nEndpoint=vpn.example.com:51820',
 });
+const { checks } = await client.monitors.checkNowAndWait(created.monitor.id);
 
-// Trigger an on-demand check, then poll it
-const { data: dispatched } = await client.monitors.checkNow(created.monitor.id);
-const status = await client.monitors.checkStatus(created.monitor.id, dispatched.check_ids);
+// VPS servers: register one and get the one-time install command + token
+const { data: vps } = await client.vps.create({ name: 'prod-db-1', ip_address: '203.0.113.5' });
+console.log(vps.install_command); // run this once on the server
+const { data: health } = await client.vps.get(vps.vps_server.id, { range: '24h' });
+await client.vps.regenerateToken(vps.vps_server.id); // rotate the token
 
-// Uptime history and full analytics
-await client.monitors.uptime(created.monitor.id, { range: '7d' });
-await client.monitors.analytics(created.monitor.id, { range: '30d' });
+// Plan, limits and renewal date
+const { data: usage } = await client.billing.usage();
+console.log(usage.billing.plan_period_ends_at, usage.billing.days_until_renewal);
 ```
 
 ## Error handling
@@ -59,17 +68,23 @@ try {
 
 ## API surface
 
+- **`client.monitors`** — `list` (paginated, with `data.summary` fleet counts), `listAll`, `summary`, `create`, `createForProject`, `get`, `details`, `update`, `bulkUpdate`, `delete`, `restore`, `checkNow`, `checkStatus`, `checkNowAndWait`, `checks`, `clearChecks`, `uptime`, `uptimeRegions`, `analytics`, `status`
+- **`client.vps`** — `list` (paginated, with `data.summary`), `listAll`, `summary`, `create` (returns the agent token and install command), `get`, `getSummary`, `history`, `update` (name, mute, alert thresholds), `regenerateToken`, `delete`, `lookupIp`
+- **`client.billing`** — `usage` (plan, every limit and how much is used, credit, renewal date), `current`, `plans`. Read-only: changing or cancelling a plan is dashboard-only.
 - **`client.projects`** — `list`, `create`, `get`, `update`, `delete`, `restore`, `regenerateKey`, `clearChecks`, `monitors`
-- **`client.monitors`** — `list`, `create`, `createForProject`, `get`, `update`, `delete`, `restore`, `checkNow`, `checkStatus`, `checks`, `clearChecks`, `uptime`, `uptimeRegions`, `analytics`, `status`
 
-Every method mirrors an endpoint documented at `/api-docs` on your ExitProbe dashboard — see there for full request/response shapes.
+Full reference with an example for each method: <https://exitprobe.com/docs/sdks/node>.
+
+### Scoped tokens
+
+A token with no abilities has full access. To limit one, choose abilities when creating it: `monitors:read|write`, `projects:read|write`, `vps:read|write`, `billing:read` (read-only), `integrations:read|write`. A call outside the token's abilities throws `ExitProbeError` with `status === 403`.
 
 ## Configuration
 
 ```ts
 new ExitProbe({
-  apiKey: 'ep_live_...',
-  baseUrl: 'https://app.exitprobe.com/api/v1', // override for self-hosted/staging
+  apiKey: process.env.EXITPROBE_API_KEY!,
+  baseUrl: 'https://api.exitprobe.com/api/v1', // override for self-hosted/staging
   timeoutMs: 30_000,
 });
 ```

@@ -20,7 +20,7 @@ describe('ExitProbe client', () => {
 
     expect(res.data.monitors).toEqual([]);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toBe('https://app.exitprobe.com/api/v1/monitors?status=down');
+    expect(String(url)).toBe('https://api.exitprobe.com/api/v1/monitors?status=down');
     expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer ep_live_test' });
   });
 

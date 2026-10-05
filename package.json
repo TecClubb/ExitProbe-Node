@@ -1,6 +1,6 @@
 {
   "name": "exitprobe",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Official Node.js / TypeScript client for the ExitProbe API — manage projects, monitors, checks, uptime and analytics.",
   "type": "module",
   "main": "./dist/index.cjs",
